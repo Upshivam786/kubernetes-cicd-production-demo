@@ -1,5 +1,8 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -7,20 +10,23 @@ from app.database import Base, engine, get_db
 from app.models import Item
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
 app = FastAPI(
     title="Fluid AI DevOps Challenge",
+    lifespan=lifespan,
 )
 
-
-@app.on_event("startup")
-def startup():
-    Base.metadata.create_all(bind=engine)
+Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
-
 
 
 @app.get("/readyz")
