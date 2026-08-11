@@ -91,8 +91,80 @@ jobs:
         run: |
           kubectl -n fluid-ai rollout status deployment/backend --timeout=120s
 
-      - name: Verify deployment
+      - name: Verify deployed image
+        run: |
+          DEPLOYED_IMAGE=$(kubectl -n fluid-ai get deployment backend \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+
+          EXPECTED_IMAGE="${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
+          echo "Expected image: ${EXPECTED_IMAGE}"
+          echo "Deployed image: ${DEPLOYED_IMAGE}"
+
+          if [ "$DEPLOYED_IMAGE" != "$EXPECTED_IMAGE" ]; then
+            echo "ERROR: deployed image does not match expected image"
+            exit 1
+          fi
+
+      - name: Verify backend pods
         run: |
           kubectl -n fluid-ai get pods -l app=backend
-          kubectl -n fluid-ai get deployment backend \
-            -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+          kubectl -n fluid-ai get deployment backend
+
+      - name: Smoke test
+        run: |
+          set -e
+
+          kubectl -n fluid-ai port-forward service/backend 18000:8000 \
+            > /tmp/backend-port-forward.log 2>&1 &
+
+          PF_PID=$!
+
+          cleanup() {
+            kill "$PF_PID" 2>/dev/null || true
+          }
+
+          trap cleanup EXIT
+
+          echo "Waiting for backend service..."
+
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:18000/healthz > /tmp/healthz.json; then
+              echo "Backend is responding."
+              break
+            fi
+
+            if [ "$i" -eq 30 ]; then
+              echo "ERROR: backend did not become available"
+              cat /tmp/backend-port-forward.log
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          echo "Testing /healthz..."
+          curl -fsS http://127.0.0.1:18000/healthz
+          echo
+
+          echo "Testing /readyz..."
+          curl -fsS http://127.0.0.1:18000/readyz
+          echo
+
+          echo "Testing /items..."
+          curl -fsS http://127.0.0.1:18000/items
+          echo
+
+          echo "Smoke tests passed."
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment verification failed."
+          echo "Rolling back backend deployment..."
+
+          kubectl -n fluid-ai rollout undo deployment/backend
+
+          kubectl -n fluid-ai rollout status deployment/backend --timeout=120s
+
+          echo "Rollback completed."
