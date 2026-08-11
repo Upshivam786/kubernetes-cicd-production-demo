@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: fluid-ai-backend
+  namespace: monitoring
+  labels:
+    release: monitoring-crds
+spec:
+  namespaceSelector:
+    matchNames:
+      - fluid-ai
+
+  selector:
+    matchLabels:
+      app: backend
+
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
