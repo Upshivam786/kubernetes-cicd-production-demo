@@ -16,10 +16,12 @@ spec:
         app: backend
 
     spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
       containers:
         - name: backend
-          image: fluid-ai-backend:dev
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/upshivam786/kubernetes-cicd-production-demo:latest
+          imagePullPolicy: Always
 
           ports:
             - name: http
