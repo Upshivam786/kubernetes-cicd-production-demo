@@ -12,6 +12,9 @@ permissions:
   contents: read
   packages: write
 
+env:
+  IMAGE_NAME: ghcr.io/upshivam786/kubernetes-cicd-production-demo
+
 jobs:
   test:
     name: Test Application
@@ -61,5 +64,35 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/upshivam786/kubernetes-cicd-production-demo:${{ github.sha }}
-            ghcr.io/upshivam786/kubernetes-cicd-production-demo:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: self-hosted
+    needs: build-and-push
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Kubernetes access
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Update backend image
+        run: |
+          kubectl -n fluid-ai set image deployment/backend \
+            backend=${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n fluid-ai rollout status deployment/backend --timeout=120s
+
+      - name: Verify deployment
+        run: |
+          kubectl -n fluid-ai get pods -l app=backend
+          kubectl -n fluid-ai get deployment backend \
+            -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
