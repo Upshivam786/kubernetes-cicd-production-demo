@@ -67,6 +67,13 @@ spec:
               cpu: 500m
               memory: 256Mi
 
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          periodSeconds: 5
+          failureThreshold: 12
+
           livenessProbe:
             httpGet:
               path: /healthz
